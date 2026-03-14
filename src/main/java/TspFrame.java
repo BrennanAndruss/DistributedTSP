@@ -2,6 +2,7 @@ import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.io.File;
+import java.net.URL;
 import java.util.List;
 
 /**
@@ -43,16 +44,20 @@ public class TspFrame extends JFrame {
     }
 
     private void onLoad() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Select a TSPLIB .tsp file");
-        chooser.setFileFilter(new FileNameExtensionFilter("TSPLIB (*.tsp)", "tsp"));
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
-        File f = chooser.getSelectedFile();
+        String defaultUrl = "https://raw.githubusercontent.com/BrennanAndruss/DistributedTSP/refs/heads/master/src/main/resources/ar9_152.tsp";
+        String urlString = JOptionPane.showInputDialog(this,
+                "Enter TSP URL:",
+                defaultUrl);
+
+        if (urlString == null || urlString.trim().isEmpty()) return;
+
         try {
-            cities = TspParser.load(f);
+            URL tspUrl = new URL(urlString);
+
+            cities = TspParser.load(tspUrl);
             tour = List.of();
             mapPanel.setCities(cities);
-            log.append("\nLoaded: " + f.getAbsolutePath() + "\n");
+            log.append("\nLoaded from URL: " + urlString + "\n");
             log.append("Cities: " + cities.size() + "\n");
         } catch (Exception ex) {
             log.append("\nERROR: " + ex.getMessage() + "\n");

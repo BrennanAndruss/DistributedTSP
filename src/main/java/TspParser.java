@@ -1,4 +1,5 @@
 import java.io.*;
+import java.net.URL;
 import java.util.*;
 
 /**
@@ -9,9 +10,17 @@ import java.util.*;
  */
 public class TspParser {
 
+    public static List<City> load(URL url) throws IOException {
+        return parse(url.openStream());
+    }
+
     public static List<City> load(File file) throws IOException {
+        return parse(new FileInputStream(file));
+    }
+
+    private static List<City> parse(InputStream is) throws IOException {
         List<City> cities = new ArrayList<>();
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
             String line;
             boolean inNodes = false;
             while ((line = br.readLine()) != null) {
