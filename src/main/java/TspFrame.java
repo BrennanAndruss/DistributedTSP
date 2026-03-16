@@ -1,8 +1,5 @@
 import javax.swing.*;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
-import java.io.File;
-import java.net.URL;
 import java.util.List;
 
 /**
@@ -18,6 +15,8 @@ public class TspFrame extends JFrame {
     private final JTextArea log = new JTextArea(8, 60);
     private List<City> cities = List.of();
     private List<Integer> tour = List.of();
+
+    private TspBlackboard blackboard = new TspBlackboard();
 
     public TspFrame() {
         super("Demo (TSPLIB + Nearest Neighbor)");
@@ -52,9 +51,9 @@ public class TspFrame extends JFrame {
         if (urlString == null || urlString.trim().isEmpty()) return;
 
         try {
-            URL tspUrl = new URL(urlString);
+            cities = blackboard.getCities(urlString);
+            blackboard.setCurrentMapUrl(urlString);
 
-            cities = TspParser.load(tspUrl);
             tour = List.of();
             mapPanel.setCities(cities);
             log.append("\nLoaded from URL: " + urlString + "\n");
@@ -69,9 +68,45 @@ public class TspFrame extends JFrame {
             log.append("\nLoad a file first.\n");
             return;
         }
-        tour = NearestNeighborSolver.solve(cities, 0);
-        double len = NearestNeighborSolver.length(cities, tour);
+
+        System.out.println(blackboard.getCurrentMapUrl());
+
+        // Configure threads
+        int cores = Runtime.getRuntime().availableProcessors();
+
+        Thread producer = new Thread(new Producer(blackboard));
+        producer.start();
+        System.out.println("Producer started.");
+
+        Thread[] localWorkers = new Thread[cores - 2];
+        for (int i = 0; i < cores - 2; i++) {
+            localWorkers[i] = new Thread(new LocalWorker(i, blackboard));
+            localWorkers[i].start();
+            System.out.println("Worker " + i + " started.");
+        }
+
+        // Wait for completion
+        try {
+            producer.join();
+            System.out.println("All jobs created.");
+            for (int i = 0; i < cores - 1; i++) {
+                blackboard.putJob(TspJob.STOP);
+            }
+
+            for (Thread t : localWorkers) {
+                t.join();
+            }
+            System.out.println("All jobs finished.");
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        tour = blackboard.getBestTour();
+        double len = blackboard.getBestTourLength();
+
+        // potential to-do: invoke in tspblackboard
         mapPanel.setTour(tour);
+
         log.append("\nNearest-neighbor tour computed.\n");
         log.append("Tour length (Euclidean): " + String.format("%.3f", len) + "\n");
     }

@@ -12,24 +12,24 @@ public class NearestNeighborSolver {
         int n = cities.size();
         if (n == 0) return List.of();
         if (startIndex < 0 || startIndex >= n) startIndex = 0;
-        boolean[] used = new boolean[n];
+        boolean[] visited = new boolean[n];
         List<Integer> tour = new ArrayList<>(n + 1);
         int current = startIndex;
-        used[current] = true;
+        visited[current] = true;
         tour.add(current);
         for (int step = 1; step < n; step++) {
             int next = -1;
             double best = Double.POSITIVE_INFINITY;
             City curCity = cities.get(current);
             for (int j = 0; j < n; j++) {
-                if (used[j]) continue;
+                if (visited[j]) continue;
                 double d = curCity.distanceTo(cities.get(j));
                 if (d < best) {
                     best = d;
                     next = j;
                 }
             }
-            used[next] = true;
+            visited[next] = true;
             tour.add(next);
             current = next;
         }
