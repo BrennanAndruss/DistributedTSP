@@ -5,7 +5,13 @@ import java.util.concurrent.*;
 
 public class TspBlackboard {
 
-    private final HashMap<String, List<City>> citiesByUrl = new HashMap<>();
+    public static final String REQUEST_TOPIC = "csc364/work/request";
+    public static final String RESPONSE_TOPIC = "csc364/work/response";
+    public static final String ASSIGN_TOPIC = "csc364/work/assign";
+    public static final String SHUTDOWN_TOPIC = "csc364/work/shutdown";
+    public static final String BROKER = "tcp://broker.hivemq.com:1883";
+
+    private final ConcurrentHashMap<String, List<City>> citiesByUrl = new ConcurrentHashMap<>();
     private String currentMapUrl;
 
     private final LinkedBlockingQueue<TspJob> queue = new LinkedBlockingQueue<>();
@@ -17,8 +23,16 @@ public class TspBlackboard {
         queue.put(job);
     }
 
+    public TspJob pollJob() throws InterruptedException {
+        return queue.poll();
+    }
+
     public TspJob takeJob() throws InterruptedException {
         return queue.take();
+    }
+
+    public int getCurrentMapSize() {
+        return citiesByUrl.get(currentMapUrl).size();
     }
 
     public String getCurrentMapUrl() {
@@ -31,6 +45,7 @@ public class TspBlackboard {
 
     /*
     City URLs:
+    "https://raw.githubusercontent.com/BrennanAndruss/DistributedTSP/refs/heads/master/src/main/resources/lu980.tsp"
     "https://raw.githubusercontent.com/BrennanAndruss/DistributedTSP/refs/heads/master/src/main/resources/ar9_152.tsp"
     "https://raw.githubusercontent.com/BrennanAndruss/DistributedTSP/refs/heads/master/src/main/resources/bm33_708.tsp"
     "https://raw.githubusercontent.com/BrennanAndruss/DistributedTSP/refs/heads/master/src/main/resources/usa115_475.tsp"

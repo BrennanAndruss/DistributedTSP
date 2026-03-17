@@ -18,6 +18,7 @@ public class LocalWorker implements Runnable {
                 // Take a job
                 TspJob tspJob = blackboard.takeJob();
                 if (tspJob.equals(TspJob.STOP)) {
+                    System.out.println("[LocalWorker " + id + "] Stopped.");
                     break;
                 }
 
@@ -26,6 +27,7 @@ public class LocalWorker implements Runnable {
 
                 // Solve the job
                 List<Integer> tour = NearestNeighborSolver.solve(cities, tspJob.startIndex);
+                System.out.println("[LocalWorker" + id + "] Job " + tspJob.id + " solved.");
 
                 // Submit job result
                 blackboard.submitJobResult(tour);

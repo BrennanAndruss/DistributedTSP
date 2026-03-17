@@ -11,6 +11,9 @@ import java.util.List;
  */
 public class TspFrame extends JFrame {
 
+    // Set to test distributed system on a single local machine
+    private final boolean testingLocal = true;
+
     private final MapPanel mapPanel = new MapPanel();
     private final JTextArea log = new JTextArea(8, 60);
     private List<City> cities = List.of();
@@ -22,16 +25,7 @@ public class TspFrame extends JFrame {
         super("Demo (TSPLIB + Nearest Neighbor)");
         log.setEditable(false);
         log.setBackground(new Color(200, 255, 220));
-        JButton loadBtn = new JButton("Load .tsp");
-        JButton solveBtn = new JButton("Nearest Neighbor");
-        JButton clearBtn = new JButton("Clear Tour");
-        loadBtn.addActionListener(e -> onLoad());
-        solveBtn.addActionListener(e -> onSolve());
-        clearBtn.addActionListener(e -> onClear());
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        top.add(loadBtn);
-        top.add(solveBtn);
-        top.add(clearBtn);
+        JPanel top = getJPanel();
         setLayout(new BorderLayout());
         add(top, BorderLayout.NORTH);
         add(mapPanel, BorderLayout.CENTER);
@@ -42,8 +36,25 @@ public class TspFrame extends JFrame {
         setLocationRelativeTo(null);
     }
 
+    private JPanel getJPanel() {
+        JButton loadBtn = new JButton("Load .tsp");
+        JButton solveBtn = new JButton("Nearest Neighbor");
+        JButton clearBtn = new JButton("Clear Tour");
+        JButton assistBtn = new JButton("Assist Remote");
+        loadBtn.addActionListener(e -> onLoad());
+        solveBtn.addActionListener(e -> onSolve());
+        clearBtn.addActionListener(e -> onClear());
+        assistBtn.addActionListener(e -> onAssist());
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        top.add(loadBtn);
+        top.add(solveBtn);
+        top.add(clearBtn);
+        top.add(assistBtn);
+        return top;
+    }
+
     private void onLoad() {
-        String defaultUrl = "https://raw.githubusercontent.com/BrennanAndruss/DistributedTSP/refs/heads/master/src/main/resources/ar9_152.tsp";
+        String defaultUrl = "https://raw.githubusercontent.com/BrennanAndruss/DistributedTSP/refs/heads/master/src/main/resources/lu980.tsp";
         String urlString = JOptionPane.showInputDialog(this,
                 "Enter TSP URL:",
                 defaultUrl);
@@ -72,17 +83,25 @@ public class TspFrame extends JFrame {
         System.out.println(blackboard.getCurrentMapUrl());
 
         // Configure threads
-        int cores = Runtime.getRuntime().availableProcessors();
+        int cores = Runtime.getRuntime().availableProcessors() / 2;
+        if (testingLocal) {
+            // Allocate half of the machine's cores to local threads
+            cores /= 2;
+        }
 
         Thread producer = new Thread(new Producer(blackboard));
         producer.start();
         System.out.println("Producer started.");
 
+        Thread outsourcer = new Thread(new Outsourcer(blackboard));
+        outsourcer.start();
+        System.out.println("Outsourcer started.");
+
         Thread[] localWorkers = new Thread[cores - 2];
         for (int i = 0; i < cores - 2; i++) {
             localWorkers[i] = new Thread(new LocalWorker(i, blackboard));
             localWorkers[i].start();
-            System.out.println("Worker " + i + " started.");
+            System.out.println("LocalWorker " + i + " started.");
         }
 
         // Wait for completion
@@ -96,6 +115,7 @@ public class TspFrame extends JFrame {
             for (Thread t : localWorkers) {
                 t.join();
             }
+            outsourcer.join();
             System.out.println("All jobs finished.");
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
@@ -115,6 +135,33 @@ public class TspFrame extends JFrame {
         tour = List.of();
         mapPanel.setTour(tour);
         log.append("\nTour cleared.\n");
+    }
+
+    private void onAssist() {
+        // Configure threads
+        int cores = Runtime.getRuntime().availableProcessors() / 2;
+        if (testingLocal) {
+            // Allocate half of the machine's cores to local threads
+            cores /= 2;
+        }
+
+        Thread[] remoteWorkers = new Thread[cores];
+        for (int i = 0; i < cores; i++) {
+            remoteWorkers[i] = new Thread(new RemoteWorker(i, blackboard));
+            remoteWorkers[i].start();
+            System.out.println("RemoteWorker " + i + " started.");
+        }
+
+        // Wait for completion
+        try {
+            for (Thread t : remoteWorkers) {
+                t.join();
+            }
+        } catch (InterruptedException ex) {
+            throw new RuntimeException(ex);
+        }
+
+        log.append("\nNearest-neighbor tour computed.\n");
     }
 
     public static void main(String[] args) {
