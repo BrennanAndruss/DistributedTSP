@@ -23,7 +23,7 @@ public class Outsourcer implements Runnable, MqttCallback {
 
     public Outsourcer(TspBlackboard blackboard) {
         this.blackboard = blackboard;
-        // potential to-do: adaptive timeouts based on map size
+        // potential to-do: adaptive timeouts based on map size and/or average job completion time
         this.timeoutMs = 15000; // Wait for more time if remote workers aren't finishing jobs
 
         try {

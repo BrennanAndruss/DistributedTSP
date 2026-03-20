@@ -11,8 +11,11 @@ import java.util.List;
  */
 public class TspFrame extends JFrame {
 
-    // Set to test distributed system on a single local machine
-    private final boolean testingLocal = true;
+    // Set to test distributed system on a single local machine with only local workers
+    private final boolean testingLocalOnly = true;
+
+    // Set to test distributed system on a single local machine with "remote" workers
+    private final boolean testingRemoteLocally = false;
 
     private final MapPanel mapPanel = new MapPanel();
     private final JTextArea log = new JTextArea(8, 60);
@@ -84,24 +87,38 @@ public class TspFrame extends JFrame {
 
         // Configure threads
         int cores = Runtime.getRuntime().availableProcessors() / 2;
-        if (testingLocal) {
+        if (testingRemoteLocally) {
             // Allocate half of the machine's cores to local threads
             cores /= 2;
         }
 
         Thread producer = new Thread(new Producer(blackboard));
-        producer.start();
-        System.out.println("Producer started.");
 
-        Thread outsourcer = new Thread(new Outsourcer(blackboard));
-        outsourcer.start();
-        System.out.println("Outsourcer started.");
+        Thread outsourcer;
+        if (!testingLocalOnly) {
+            outsourcer = new Thread(new Outsourcer(blackboard));
+        }
 
-        Thread[] localWorkers = new Thread[cores - 2];
-        for (int i = 0; i < cores - 2; i++) {
+        int workerCores = cores - 2; // 2 for producer and main thread
+        if (!testingLocalOnly) {
+            // 1 for outsourcer, 1 more to prevent thread explosion from degrading MQTT connections
+            workerCores -= 2;
+        }
+
+        Thread[] localWorkers = new Thread[workerCores];
+        for (int i = 0; i < workerCores; i++) {
             localWorkers[i] = new Thread(new LocalWorker(i, blackboard));
-            localWorkers[i].start();
-            System.out.println("LocalWorker " + i + " started.");
+        }
+
+        // Start threads
+        long startTime = System.currentTimeMillis();
+
+        producer.start();
+        if (!testingLocalOnly) {
+            outsourcer.start();
+        }
+        for (Thread t : localWorkers) {
+            t.start();
         }
 
         // Wait for completion
@@ -115,11 +132,15 @@ public class TspFrame extends JFrame {
             for (Thread t : localWorkers) {
                 t.join();
             }
-            outsourcer.join();
+            if (!testingLocalOnly) {
+                outsourcer.join();
+            }
             System.out.println("All jobs finished.");
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+
+        long endTime = System.currentTimeMillis() - startTime;
 
         tour = blackboard.getBestTour();
         double len = blackboard.getBestTourLength();
@@ -129,6 +150,7 @@ public class TspFrame extends JFrame {
 
         log.append("\nNearest-neighbor tour computed.\n");
         log.append("Tour length (Euclidean): " + String.format("%.3f", len) + "\n");
+        log.append("Total time: " + (endTime - startTime) + " ms");
     }
 
     private void onClear() {
@@ -140,13 +162,15 @@ public class TspFrame extends JFrame {
     private void onAssist() {
         // Configure threads
         int cores = Runtime.getRuntime().availableProcessors() / 2;
-        if (testingLocal) {
+        if (testingRemoteLocally) {
             // Allocate half of the machine's cores to local threads
             cores /= 2;
         }
 
-        Thread[] remoteWorkers = new Thread[cores];
-        for (int i = 0; i < cores; i++) {
+        int workerCores = cores - 1; // 1 for main thread
+
+        Thread[] remoteWorkers = new Thread[workerCores];
+        for (int i = 0; i < workerCores; i++) {
             remoteWorkers[i] = new Thread(new RemoteWorker(i, blackboard));
             remoteWorkers[i].start();
             System.out.println("RemoteWorker " + i + " started.");
