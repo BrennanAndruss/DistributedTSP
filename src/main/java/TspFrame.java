@@ -153,7 +153,7 @@ public class TspFrame extends JFrame {
 
     private void onAssist() {
         // Configure threads
-        int cores = Runtime.getRuntime().availableProcessors() / 2;
+        int cores = Runtime.getRuntime().availableProcessors();
         if (testingRemoteLocally) {
             // Allocate half of the machine's cores to local threads
             cores /= 2;
