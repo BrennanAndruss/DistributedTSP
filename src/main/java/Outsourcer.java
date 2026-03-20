@@ -21,6 +21,8 @@ public class Outsourcer implements Runnable, MqttCallback {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    private int jobsSolved = 0;
+
     public Outsourcer(TspBlackboard blackboard) {
         this.blackboard = blackboard;
         // potential to-do: adaptive timeouts based on map size and/or average job completion time
@@ -37,11 +39,18 @@ public class Outsourcer implements Runnable, MqttCallback {
     @Override
     public void run() {
         try {
-            client.connect();
+            // Options for better MqttConnection reliability
+            MqttConnectOptions options = new MqttConnectOptions();
+            options.setAutomaticReconnect(true);
+            options.setCleanSession(true);
+            options.setKeepAliveInterval(60);
+            options.setConnectionTimeout(30);
+
+            client.connect(options);
             client.subscribe(TspBlackboard.REQUEST_TOPIC);
             client.subscribe(TspBlackboard.RESPONSE_TOPIC);
 
-            // Keep thread running while outsourcer takes and distributes jobs
+            // Keep thread running while outsourcer waits for requests and distributes jobs
             while (true) {
                 // Track distributed jobs
                 System.out.println("[Outsourcer] Tracking jobs...");
@@ -63,6 +72,18 @@ public class Outsourcer implements Runnable, MqttCallback {
                 // Once STOP received, wait for jobs in flight to complete
                 if (stopReceived && jobQueue.isEmpty() && inFlightJobs.isEmpty()) {
                     sendShutdown();
+                    System.out.println("[Outsourcer] Outsourcer stopped.");
+                    System.out.println("[Outsourcer] " + jobsSolved + " solved remotely.");
+                    client.disconnect();
+                    break;
+                }
+
+                // If there are no jobs left in the global queue, wait for jobs in flight to complete
+                // (The above condition does not trigger if no remote workers are making requests)
+                if (blackboard.allJobsDone() && jobQueue.isEmpty() && inFlightJobs.isEmpty()) {
+                    sendShutdown();
+                    System.out.println("[Outsourcer] Outsourcer stopped.");
+                    System.out.println("[Outsourcer] " + jobsSolved + " jobs solved remotely.");
                     client.disconnect();
                     break;
                 }
@@ -94,7 +115,7 @@ public class Outsourcer implements Runnable, MqttCallback {
 
     @Override
     public void connectionLost(Throwable throwable) {
-
+        System.err.println("[Outsourcer] CONNECTION LOST: " + throwable.getMessage());
     }
 
     @Override
@@ -150,6 +171,7 @@ public class Outsourcer implements Runnable, MqttCallback {
 
         // Submit job result
         blackboard.submitJobResult(solvedTspJob.tour);
+        jobsSolved++;
     }
 
     private void sendShutdown() throws Exception {

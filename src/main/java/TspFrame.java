@@ -11,9 +11,6 @@ import java.util.List;
  */
 public class TspFrame extends JFrame {
 
-    // Set to test distributed system on a single local machine with only local workers
-    private final boolean testingLocalOnly = true;
-
     // Set to test distributed system on a single local machine with "remote" workers
     private final boolean testingRemoteLocally = false;
 
@@ -67,6 +64,7 @@ public class TspFrame extends JFrame {
         try {
             cities = blackboard.getCities(urlString);
             blackboard.setCurrentMapUrl(urlString);
+            blackboard.resetBestTour();
 
             tour = List.of();
             mapPanel.setCities(cities);
@@ -93,17 +91,13 @@ public class TspFrame extends JFrame {
         }
 
         Thread producer = new Thread(new Producer(blackboard));
+        Thread outsourcer = new Thread(new Outsourcer(blackboard));
 
-        Thread outsourcer;
-        if (!testingLocalOnly) {
-            outsourcer = new Thread(new Outsourcer(blackboard));
-        }
-
-        int workerCores = cores - 2; // 2 for producer and main thread
-        if (!testingLocalOnly) {
-            // 1 for outsourcer, 1 more to prevent thread explosion from degrading MQTT connections
-            workerCores -= 2;
-        }
+        // Save 1 core for producer
+        // Save 1 core for outsourcer
+        // Save 1 core for main thread
+        // Save 1 more core to prevent thread explosion from degrading MQTT connections
+        int workerCores = cores - 4; // 2 for producer and main thread
 
         Thread[] localWorkers = new Thread[workerCores];
         for (int i = 0; i < workerCores; i++) {
@@ -111,12 +105,10 @@ public class TspFrame extends JFrame {
         }
 
         // Start threads
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
 
         producer.start();
-        if (!testingLocalOnly) {
-            outsourcer.start();
-        }
+        outsourcer.start();
         for (Thread t : localWorkers) {
             t.start();
         }
@@ -125,22 +117,22 @@ public class TspFrame extends JFrame {
         try {
             producer.join();
             System.out.println("All jobs created.");
-            for (int i = 0; i < cores - 1; i++) {
+
+            int activeThreads = workerCores + 1;
+            for (int i = 0; i < activeThreads - 1; i++) {
                 blackboard.putJob(TspJob.STOP);
             }
 
             for (Thread t : localWorkers) {
                 t.join();
             }
-            if (!testingLocalOnly) {
-                outsourcer.join();
-            }
+            outsourcer.join();
             System.out.println("All jobs finished.");
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
 
-        long endTime = System.currentTimeMillis() - startTime;
+        long endTime = System.nanoTime();
 
         tour = blackboard.getBestTour();
         double len = blackboard.getBestTourLength();
@@ -150,7 +142,7 @@ public class TspFrame extends JFrame {
 
         log.append("\nNearest-neighbor tour computed.\n");
         log.append("Tour length (Euclidean): " + String.format("%.3f", len) + "\n");
-        log.append("Total time: " + (endTime - startTime) + " ms");
+        log.append("Total time: " + (endTime - startTime) / 1_000_000_000.0 + " s");
     }
 
     private void onClear() {

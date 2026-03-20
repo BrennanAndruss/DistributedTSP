@@ -19,6 +19,12 @@ public class TspBlackboard {
     private List<Integer> bestTour;
     private double bestTourLength = Double.MAX_VALUE;
 
+    public boolean allJobsDone() throws InterruptedException {
+        // Return false if no jobs have been completed yet
+        if (bestTourLength == Double.MAX_VALUE) return false;
+        return queue.isEmpty();
+    }
+
     public void putJob(TspJob job) throws InterruptedException {
         queue.put(job);
     }
@@ -63,6 +69,11 @@ public class TspBlackboard {
         }
 
         return citiesByUrl.get(urlString);
+    }
+
+    public void resetBestTour() {
+        bestTourLength = Double.MAX_VALUE;
+        bestTour = null;
     }
 
     public List<Integer> getBestTour() {
